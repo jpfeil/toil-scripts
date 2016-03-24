@@ -21,7 +21,7 @@ def mkdir_p(path):
             raise
 
 
-def tarball_files(tar_name, work_dir='.', prefix='', fpaths=None):
+def tarball_files(tar_name, work_dir='.', prefix='', seperator='', fpaths=None):
     """
     Creates a tarball from a group of files
 
@@ -34,18 +34,17 @@ def tarball_files(tar_name, work_dir='.', prefix='', fpaths=None):
         fpaths = []
     with tarfile.open(os.path.join(work_dir, tar_name), 'w:gz') as f_out:
         for fpath in fpaths:
-            f_out.add(fpath, arcname=prefix + os.path.basename(fpath))
+            arcname = prefix + seperator + os.path.basename(fpath)
+            f_out.add(fpath, arcname=arcname)
 
 
-def move_to_output_dir(output_dir, filepaths=None):
+def move_files(filepaths, output_dir):
     """
     Moves files from the working directory to the output directory.
 
     :param str output_dir: Output directory
-    :param list[str] filepaths: Filepaths to move
+    :param list[str] filepaths: File paths to move
     """
-    if filepaths is None:
-        filepaths = []
     for fpath in filepaths:
         dest = os.path.join(output_dir, os.path.basename(fpath))
         shutil.move(fpath, dest)
@@ -54,7 +53,7 @@ def move_to_output_dir(output_dir, filepaths=None):
 def consolidate_tarballs_job(job, **fname_to_id):
     """
     Combine the contents of separate tarballs into one.
-    Subdirs within the tarball will be named the keys in **kwargs.
+    Subdirs within the tarball will be named the keys in **fname_to_id
 
     :param dict[str,str] fname_to_id: Key word arguments of the form: file_name_prefix=FileStoreID
     :return str: FileStoreID

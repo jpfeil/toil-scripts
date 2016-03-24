@@ -1,5 +1,6 @@
 import os
 import subprocess
+import filecmp
 from toil.job import Job
 
 
@@ -27,17 +28,18 @@ def test_upload_and_download_with_encryption(tmpdir):
     subprocess.check_call(['dd', 'if=/dev/urandom', 'bs=1', 'count=32',
                            'of={}'.format(key_path)])
     # Create test file
-    fpath = os.path.join(work_dir, 'output_file')
-    with open(fpath, 'wb') as fout:
+    upload_fpath = os.path.join(work_dir, 'upload_file')
+    with open(upload_fpath, 'wb') as fout:
         fout.write(os.urandom(1024))
     # Upload file
     s3_dir = 's3://cgl-driver-projects/test'
-    s3am_upload(fpath=fpath, s3_dir=s3_dir, s3_encryption_key_path=key_path)
-    os.remove(fpath)
+    s3am_upload(fpath=upload_fpath, s3_dir=s3_dir, s3_encryption_key_path=key_path)
     # Download the file
-    url = 'https://s3-us-west-2.amazonaws.com/cgl-driver-projects/test/output_file'
-    download_url(url=url, work_dir=work_dir, s3_encryption_key_path=key_path)
-    assert os.path.exists(os.path.join(work_dir, 'output_file'))
+    url = 'https://s3-us-west-2.amazonaws.com/cgl-driver-projects/test/upload_file'
+    download_url(url=url, name='download_file', work_dir=work_dir, s3_encryption_key_path=key_path)
+    download_fpath = os.path.join(work_dir, 'download_file')
+    assert os.path.exists(download_fpath)
+    assert filecmp.cmp(upload_fpath, download_fpath)
     # Delete the Key
     conn = S3Connection()
     b = Bucket(conn, 'cgl-driver-projects')

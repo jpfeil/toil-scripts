@@ -1,7 +1,7 @@
 import os
 import subprocess
 
-
+# FIXME: replace with bd2k.util.processes.which
 def which(program):
     """
     Determines if a program exists
@@ -48,4 +48,6 @@ def docker_call(tool, parameters=None, work_dir='.', env=None, sudo=False, outfi
     if env:
         for e, v in env.iteritems():
             base_docker_call.extend(['-e', '{}={}'.format(e, v)])
-    subprocess.check_call(base_docker_call + [tool] + parameters, stdout=outfile)
+    docker_command = base_docker_call + [tool] + parameters
+    subprocess.check_call(docker_command, stdout=outfile)
+    return docker_command

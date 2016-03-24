@@ -12,7 +12,7 @@ def download_url(url, work_dir='.', name=None, s3_encryption_key_path=None):
     :param str url: URL to download from
     :param str work_dir: Directory to download file to
     :param str name: Name of output file, if None, basename of URL is used
-    :param str s3_encryption_key_path: Path to the 32-byte encryption key if stored in S3
+    :param str s3_encryption_key_path: Path to 32-byte encryption key if url points to S3 file that uses SSE-C
     :return str: Path to the downloaded file
     """
     file_path = os.path.join(work_dir, name) if name else os.path.join(work_dir, os.path.basename(url))
@@ -127,18 +127,18 @@ def _generate_unique_key(master_key_path, url):
     return new_key
 
 
-def _s3am_with_retry(c, *args):
+def _s3am_with_retry(num_cores, *args):
     """
     Calls S3AM upload with retries
 
-    :param int c: Number of cores to pass to upload/download slots
+    :param int num_cores: Number of cores to pass to upload/download slots
     :param list[str] args: Additional arguments to append to s3am
     """
     retry_count = 3
     for i in xrange(retry_count):
         s3am_command = ['s3am', 'upload', '--resume', '--part-size=50M',
-                        '--upload-slots={}'.format(c),
-                        '--download-slots={}'.format(c)] + list(args)
+                        '--upload-slots={}'.format(num_cores),
+                        '--download-slots={}'.format(num_cores)] + list(args)
         ret_code = subprocess.call(s3am_command)
         if ret_code == 0:
             return
