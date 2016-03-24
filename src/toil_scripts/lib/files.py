@@ -21,7 +21,7 @@ def mkdir_p(path):
             raise
 
 
-def tarball_files(tar_name, work_dir='.', prefix='', separator='', fpaths=None):
+def tarball_files(tar_name, work_dir='.', prefix='', fpaths=None):
     """
     Creates a tarball from a group of files
 
@@ -34,7 +34,7 @@ def tarball_files(tar_name, work_dir='.', prefix='', separator='', fpaths=None):
         fpaths = []
     with tarfile.open(os.path.join(work_dir, tar_name), 'w:gz') as f_out:
         for fpath in fpaths:
-            arcname = prefix + seperator + os.path.basename(fpath)
+            arcname = prefix + os.path.basename(fpath)
             f_out.add(fpath, arcname=arcname)
 
 
