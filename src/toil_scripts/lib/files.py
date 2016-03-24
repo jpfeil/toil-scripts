@@ -21,7 +21,7 @@ def mkdir_p(path):
             raise
 
 
-def tarball_files(tar_name, work_dir='.', prefix='', seperator='', fpaths=None):
+def tarball_files(tar_name, work_dir='.', prefix='', separator='', fpaths=None):
     """
     Creates a tarball from a group of files
 
