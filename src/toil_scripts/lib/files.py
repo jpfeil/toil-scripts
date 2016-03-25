@@ -21,17 +21,15 @@ def mkdir_p(path):
             raise
 
 
-def tarball_files(tar_name, work_dir='.', prefix='', fpaths=None):
+def tarball_files(tar_name, fpaths, work_dir='.', prefix=''):
     """
     Creates a tarball from a group of files
 
     :param str tar_name: Name of tarball
-    :param str work_dir: Current working directory
     :param list[str] fpaths: File paths to include in the tarball
+    :param str work_dir: Current working directory
     :param str prefix: Optional prefix for files in tarball
     """
-    if fpaths is None:
-        fpaths = []
     with tarfile.open(os.path.join(work_dir, tar_name), 'w:gz') as f_out:
         for fpath in fpaths:
             arcname = prefix + os.path.basename(fpath)
@@ -65,6 +63,7 @@ def consolidate_tarballs_job(job, **fname_to_id):
         p = job.fileStore.readGlobalFile(file_store_id, os.path.join(work_dir, fname + '.tar.gz'))
         tar_paths.append((p, fname))
     # I/O
+    # output_name is arbitrary as this job function returns a FileStoreId
     output_name = 'foo.tar.gz'
     out_tar = os.path.join(work_dir, output_name)
     # Consolidate separate tarballs into one

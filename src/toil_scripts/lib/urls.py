@@ -43,15 +43,11 @@ def s3am_upload(fpath, s3_dir, num_cores=1, s3_encryption_key_path=None):
     :param int num_cores: Number of cores to use for up/download with S3AM
     :param str s3_encryption_key_path: (OPTIONAL) Path to 32-byte key to be used for SSE-C encryption
     """
-    assert s3_dir.startswith('s3://'), 'Format of s3_dir (s3://) is incorrect: {}'.format(s3_dir)
+    if not s3_dir.startswith('s3://'):
+        raise ValueError('Format of s3_dir (s3://) is incorrect: {}'.format(s3_dir))
     s3_dir = os.path.join(s3_dir, os.path.basename(fpath))
     if s3_encryption_key_path:
-        base_url = 'https://s3-us-west-2.amazonaws.com/'
-        url = os.path.join(base_url, s3_dir[5:])
-        temp_key_path = os.path.join(os.path.split(fpath)[0], 'temp.key')
-        with open(temp_key_path, 'wb') as f_out:
-            f_out.write(_generate_unique_key(s3_encryption_key_path, url))
-        _s3am_with_retry(num_cores, '--sse-key-file', temp_key_path,
+        _s3am_with_retry(num_cores, '--sse-key-is-master', '--sse-key-file', s3_encryption_key_path,
                          'file://{}'.format(fpath), s3_dir)
     else:
         _s3am_with_retry(num_cores, 'file://{}'.format(fpath), s3_dir)
@@ -97,7 +93,7 @@ def _download_encrypted_file(url, file_path, key_path):
     with open(key_path, 'r') as f:
         key = f.read()
     if len(key) != 32:
-        raise RuntimeError('Invalid Key! Must be 32 bytes: {}'.format(key))
+        raise ValueError('Bad key in {}. Must be 32 bytes'.format(key_path))
 
     key = _generate_unique_key(key_path, url)
     # Create necessary headers for SSE-C encryption and download
@@ -120,10 +116,10 @@ def _generate_unique_key(master_key_path, url):
     """
     with open(master_key_path, 'r') as f:
         master_key = f.read()
-    assert len(master_key) == 32, 'Invalid Key! Must be 32 characters. ' \
-                                  'Key: {}, Length: {}'.format(master_key, len(master_key))
+    if len(master_key) != 32:
+        raise ValueError('Bad key in {}. Must be 32 bytes'.format(master_key_path))
     new_key = hashlib.sha256(master_key + url).digest()
-    assert len(new_key) == 32, 'New key is invalid and is not 32 characters: {}'.format(new_key)
+    assert len(new_key) == 32, 'New key is not 32 bytes and is invalid! Check code'
     return new_key
 
 

@@ -10,6 +10,8 @@ def sample_batcher_job(job, func, samples, *args):
     :param list args: any arguments to be passed to the function
     :return:
     """
+    # num_partitions isn't exposed as an argument in order to be transparent to the user.
+    # The value for num_partitions is a tested value
     num_partitions = 100
     partition_size = len(samples) / num_partitions
     if partition_size > 1:
