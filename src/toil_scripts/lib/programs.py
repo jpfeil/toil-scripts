@@ -45,7 +45,6 @@ def docker_call(tool, parameters=None, work_dir='.', rm=True, env=None, sudo=Fal
     """
     base_docker_call = ['docker', 'run',
                         '--log-driver=none',
-                        '--rm',
                         '-v', '{}:/data'.format(os.path.abspath(work_dir))]
     if rm:
         base_docker_call.append('--rm')

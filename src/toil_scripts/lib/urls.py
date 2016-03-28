@@ -5,7 +5,7 @@ import subprocess
 from urlparse import urlparse
 
 
-def download_url(url, work_dir='.', name=None, s3_encryption_key_path=None):
+def download_url(url, work_dir='.', name=None, s3_encryption_key_path=None, ceph=None):
     """
     Downloads URL, can pass in file://, http://, s3://, or ftp://
 
@@ -19,7 +19,7 @@ def download_url(url, work_dir='.', name=None, s3_encryption_key_path=None):
     if s3_encryption_key_path:
         _download_encrypted_file(url, file_path, s3_encryption_key_path)
     elif url.startswith('s3:'):
-        _download_s3_url(file_path, url)
+        _download_s3_url(file_path, url, ceph)
     else:
         subprocess.check_call(['curl', '-fs', '--retry', '5', '--create-dir', url, '-o', file_path])
     assert os.path.exists(file_path)
@@ -60,15 +60,18 @@ def s3am_upload_job(job, file_id, file_name, s3_dir, num_cores, s3_encryption_ke
     s3am_upload(fpath=fpath, s3_dir=s3_dir, num_cores=num_cores, s3_encryption_key_path=s3_encryption_key_path)
 
 
-def _download_s3_url(file_path, url):
+def _download_s3_url(file_path, url, ceph=None):
     """
     Downloads from S3 URL via Boto
 
     :param str file_path: Path to file
     :param str url: S3 URL
     """
-    from boto.s3.connection import S3Connection
-    s3 = S3Connection()
+    from boto.s3.connection import S3Connection, OrdinaryCallingFormat
+    if ceph:
+        s3 = S3Connection(host='ceph-gw-01', is_secure=False, calling_format=OrdinaryCallingFormat(),)
+    else:
+        s3 = S3Connection()
     try:
         parsed_url = urlparse(url)
         if not parsed_url.netloc or not parsed_url.path.startswith('/'):
