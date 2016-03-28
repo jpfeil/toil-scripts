@@ -48,7 +48,7 @@ def docker_call(tool, parameters=None, work_dir='.', rm=True, env=None, sudo=Fal
                         '--rm',
                         '-v', '{}:/data'.format(os.path.abspath(work_dir))]
     if rm:
-        base_docker_call.extend(['--rm'])
+        base_docker_call.append('--rm')
     if sudo:
         base_docker_call.insert(0, 'sudo')
     if env:

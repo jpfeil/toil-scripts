@@ -16,4 +16,4 @@ def test_docker_call(tmpdir):
     fpath = os.path.join(work_dir, 'test')
     with open(fpath, 'w') as f:
         docker_call(tool='ubuntu', env=dict(foo='bar'), parameters=['printenv', 'foo'], outfile=f)
-    assert open(fpath).read().strip() == 'bar'
+    assert open(fpath).read() == 'bar\n'
