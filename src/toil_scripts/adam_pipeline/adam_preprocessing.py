@@ -127,21 +127,40 @@ def remove_file(masterIP, filename, sparkOnToil):
     :type masterIP: MasterAddress
     """
     masterIP = masterIP.actual
+
+    ssh_call = ['ssh', '-o', 'StrictHostKeyChecking=no', masterIP]
+
     if sparkOnToil:
-        try:
-            output = check_output(['ssh',
-                                   '-o', 'StrictHostKeyChecking=no',
-                                   masterIP, 'docker', 'ps'])
-            containerID = next(line.split()[0] for line in output.splitlines() if 'apache-hadoop-master' in line)
-            check_call(['ssh',
-                        '-o', 'StrictHostKeyChecking=no',
-                        masterIP,
-                        'docker', 'exec', containerID,
-                        'hdfs', 'dfs', '-rm', '-r', '/' + filename])
-        except:
-            pass
-    else:
-        log.warning('Cannot remove file %s. Can only remove files when running Spark-on-Toil', filename)
+        output = check_output(ssh_call +  ['docker', 'ps'])
+        containerID = next(line.split()[0] for line in output.splitlines() if 'apache-hadoop-master' in line)
+        ssh_call += ['docker', 'exec', containerID]
+
+    try:
+        check_call(ssh_call + ['hdfs', 'dfs', '-rm', '-r', '/' + filename])
+    except:
+        pass
+
+
+def truncate_file(masterIP, filename, sparkOnToil):
+    """
+    Truncate the given hdfs file to 0 bytes with master at the given IP address
+
+    :type masterIP: MasterAddress
+    """
+    masterIP = masterIP.actual
+
+    ssh_call = ['ssh', '-o', 'StrictHostKeyChecking=no', masterIP]
+
+    if sparkOnToil:
+        output = check_output(ssh_call +  ['docker', 'ps'])
+        containerID = next(line.split()[0] for line in output.splitlines() if 'apache-hadoop-master' in line)
+        ssh_call += ['docker', 'exec', containerID]
+
+    try:
+        check_call(ssh_call + ['hdfs', 'dfs', '-truncate', '-w', '0', '/' + filename])
+    except:
+        pass
+
 
 # FIXME: unused parameter sparkOnToil
 
@@ -182,7 +201,7 @@ def adam_convert(masterIP, inputs, inFile, inSnps, adamFile, adamSnps, sparkOnTo
                inSnps, adamSnps])
 
     inSnpsName = inSnps.split("/")[-1]
-    remove_file(masterIP, snpFileName, sparkOnToil)
+    remove_file(masterIP, inSnpsName, sparkOnToil)
 
 
 def adam_transform(masterIP, inputs, inFile, snpFile, hdfsDir, outFile, sparkOnToil):
@@ -244,6 +263,10 @@ def upload_data(masterIP, inputs, hdfsName, uploadName, sparkOnToil):
     """
     Upload file hdfsName from hdfs to s3
     """
+
+    if inputs['mock']:
+        truncate_file(masterIP, hdfsName, sparkOnToil)
+
     log.info("Uploading output BAM %s to %s.", hdfsName, uploadName)
     call_conductor(masterIP, inputs, hdfsName, uploadName)
 
@@ -362,6 +385,8 @@ def build_parser():
                         help='Docker usually needs sudo to execute '
                         'locally, but not''when running Mesos '
                         'or when a member of a Docker group.')
+    parser.add_argument('--mock', dest='mock', action='store_true', help='Run the pipeline in mock mode, which skips all '
+                                                                         'docker calls and creates blank result files.')
 
     return parser
 
@@ -378,8 +403,8 @@ def main(args):
                          (options.master_ip, options.num_nodes))
 
     if options.num_nodes <= 1:
-        raise ValueError("--num_nodes allocates one Spark/HDFS master and n-1 workers, and thus must be greater than 1. %d was passed." %
-                         options.num_nodes)
+        raise ValueError("--num_nodes allocates one Spark/HDFS master and n-1 workers, and thus must be greater "
+                         "than 1. %d was passed." % options.num_nodes)
 
     inputs = {'numWorkers': options.num_nodes - 1,
               'outDir':     options.output_directory,
@@ -389,7 +414,8 @@ def main(args):
               'executorMemory': options.executor_memory,
               'sudo': options.sudo,
               'suffix': None,
-              'masterIP': options.master_ip}
+              'masterIP': options.master_ip,
+              'mock': options.mock}
 
     Job.Runner.startToil(Job.wrapJobFn(static_adam_preprocessing_dag, inputs), options)
 

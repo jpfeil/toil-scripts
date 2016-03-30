@@ -65,6 +65,8 @@ def build_parser():
     parser.add_argument('-se', '--file_size', default='100G', help='Approximate input file size. Should be given as %d[TGMK], e.g., for a 100 gigabyte file, use --file_size 100G')
     parser.add_argument('--trim', action='store_true', help='Trim adapters. Ony works with --use_bwakit.')
     parser.add_argument('--skip_sort', action='store_true', help='Skip sorting. Only works with --use_bwakit.')
+    parser.add_argument('--mock', dest='mock', action='store_true', help='Run the pipeline in mock mode, which skips all '
+                                                                         'docker calls and creates blank result files.')
     parser.set_defaults(sudo=False)
     return parser
 
@@ -178,12 +180,15 @@ def return_input_paths(job, work_dir, ids, *args):
 def docker_call(work_dir,
                 tool_parameters,
                 tool,
+                inputs,
+                outputs,
                 java_opts=None,
                 outfile=None,
                 sudo=False,
                 docker_parameters=None,
                 check_output=False,
-                no_rm=False):
+                no_rm=False,
+                mock=False):
     """
     Makes subprocess call of a command to a docker container.
 
@@ -193,6 +198,23 @@ def docker_call(work_dir,
     outfile: file           Filehandle that stderr will be passed to
     sudo: bool              If the user wants the docker command executed as sudo
     """
+
+    for filename in inputs:
+        if not os.path.isabs(filename):
+            filename = os.path.join(work_dir, filename)
+        assert(os.path.isfile(filename))
+
+    if mock:
+        for filename, location in outputs.items():
+            if location is None:
+                # create mock file
+                if not os.path.exists(filename):
+                    open(filename, 'w').close()
+            else:
+                # download file FIXME
+                pass
+        return
+
     rm = '--rm'
     if no_rm:
         rm = ''
@@ -222,6 +244,10 @@ def docker_call(work_dir,
     except OSError:
         raise RuntimeError('docker not found on system. Install on all nodes.')
 
+    for filename in outputs.keys():
+        if not os.path.isabs(filename):
+            filename = os.path.join(work_dir, filename)
+        assert(os.path.isfile(filename))
 
 def copy_to_output_dir(work_dir, output_dir, uuid=None, files=()):
     """
@@ -403,6 +429,7 @@ def run_bwa(job, job_vars):
     input_args, ids = job_vars
     work_dir = job.fileStore.getLocalTempDir()
     sudo = input_args['sudo']
+    mock = input_args['mock']
     cores = input_args['cpu_count']
     # Retrieve samples
     return_input_paths(job, work_dir, ids, 'r1.fq.gz', 'r2.fq.gz')
@@ -410,8 +437,12 @@ def run_bwa(job, job_vars):
     return_input_paths(job, work_dir, ids, 'ref.fa', 'ref.fa.amb', 'ref.fa.ann',
                        'ref.fa.bwt', 'ref.fa.pac', 'ref.fa.sa', 'ref.fa.fai')
 
+    inputs = ['/data/ref.fa', '/data/r1.fq.gz', '/data/r2.fq.gz', 'ref.fa', 'ref.fa.amb', 'ref.fa.ann',
+              'ref.fa.bwt', 'ref.fa.pac', 'ref.fa.sa', 'ref.fa.fai']
+
     if input_args['ref.fa.alt']:
         return_input_paths(job, work_dir, ids, 'ref.fa.alt')
+        inputs.append('ref.fa.alt')
 
     if input_args['use_bwakit']:
 
@@ -443,8 +474,9 @@ def run_bwa(job, job_vars):
                        '/data/r1.fq.gz',
                        '/data/r2.fq.gz'])
 
+        outputs={'aligned.aln.bam': mock_bam} #FIXME
         docker_call(tool='quay.io/ucsc_cgl/bwakit:0.7.12--528bb9bf73099a31e74a7f5e6e3f2e0a41da486e',
-                    tool_parameters=parameters, work_dir=work_dir, sudo=sudo)
+                    tool_parameters=parameters, inputs=inputs, outputs=outputs, work_dir=work_dir, sudo=sudo, mock=mock)
 
         # bwa insists on adding an `*.aln.sam` suffix, so rename the output file
         output_file = '{}.bam'.format(uuid)
@@ -460,9 +492,11 @@ def run_bwa(job, job_vars):
                       "-t", str(cores),
                       "/data/ref.fa"] + ['/data/r1.fq.gz', '/data/r2.fq.gz']
 
+        outputs = {'aligned.sam': None}
         with open(os.path.join(work_dir, 'aligned.sam'), 'w') as samfile:
             docker_call(tool='quay.io/ucsc_cgl/bwa:0.7.12--dd5ac549b95eb3e5d166a5e310417ef13651994e',
-                        tool_parameters=parameters, work_dir=work_dir, outfile=samfile, sudo=sudo)
+                        tool_parameters=parameters, inputs=inputs, outputs=outputs, work_dir=work_dir,
+                        outfile=samfile, sudo=sudo, mock=mock)
 
         # write aligned sam file to global file store
         return job.fileStore.writeGlobalFile(os.path.join(work_dir, 'aligned.sam'))
@@ -479,16 +513,19 @@ def bam_conversion(job, job_vars, sam_id):
     input_args, ids = job_vars
     work_dir = job.fileStore.getLocalTempDir()
     sudo = input_args['sudo']
+    mock = input_args['mock']
     # Retrieve input file
     job.fileStore.readGlobalFile(sam_id, os.path.join(work_dir, 'aligned.sam'))
     # Call: Samtools
     parameters = ['view',
                   '-bS',
                   '/data/aligned.sam']
-
+    inputs = ['aligned.sam']
+    outputs = {'aligned.bam': None}
     with open(os.path.join(work_dir, 'aligned.bam'), 'w') as bamfile:
         docker_call(tool='quay.io/ucsc_cgl/samtools:1.2--35ac87df5b21a8e8e8d159f26864ac1e1db8cf86',
-                    tool_parameters=parameters, work_dir=work_dir, outfile=bamfile, sudo=sudo)
+                    tool_parameters=parameters, inputs=inputs, outputs=outputs, work_dir=work_dir, outfile=bamfile,
+                    sudo=sudo, mock=mock)
     return job.fileStore.writeGlobalFile(os.path.join(work_dir, 'aligned.bam'))
 
 
@@ -503,6 +540,7 @@ def fix_bam_header(job, job_vars, bam_id):
     work_dir = job.fileStore.getLocalTempDir()
     input_args, ids = job_vars
     sudo = input_args['sudo']
+    mock = input_args['mock']
     # Retrieve input file
     try:
         job.fileStore.readGlobalFile(bam_id, os.path.join(work_dir, 'aligned.bam'))
@@ -519,9 +557,12 @@ def fix_bam_header(job, job_vars, bam_id):
                   '-H',
                   '/data/aligned.bam']
 
+    inputs = ['aligned.bam']
+    outputs = {'output_bam.header': None}
     with open(os.path.join(work_dir, 'aligned_bam.header'), 'w') as headerfile:
         docker_call(tool='quay.io/ucsc_cgl/samtools:1.2--35ac87df5b21a8e8e8d159f26864ac1e1db8cf86',
-                    tool_parameters=parameters, work_dir=work_dir, outfile=headerfile, sudo=sudo)
+                    tool_parameters=parameters, inputs=inputs, outputs=outputs, work_dir=work_dir, outfile=headerfile,
+                    sudo=sudo, mock=mock)
     with open(headerfile.name, 'r') as headerfile, open('/'.join([work_dir, 'output_bam.header']), 'w') as outheaderfile:
             for line in headerfile:
                 if line.strip().startswith('@PG'):
@@ -532,9 +573,12 @@ def fix_bam_header(job, job_vars, bam_id):
                   '/data/output_bam.header',
                   '/data/aligned.bam']
     # Memory leak, crashes
+    inputs = ['aligned.bam', 'output_bam.header']
+    outputs = {'aligned_fixPG.bam': None}
     with open(os.path.join(work_dir, 'aligned_fixPG.bam'), 'w') as fixpg_bamfile:
         docker_call(tool='quay.io/ucsc_cgl/samtools:1.2--35ac87df5b21a8e8e8d159f26864ac1e1db8cf86',
-                    tool_parameters=parameters, work_dir=work_dir, outfile=fixpg_bamfile, sudo=sudo)
+                    tool_parameters=parameters, inputs=inputs, outputs=outputs, work_dir=work_dir,
+                    outfile=fixpg_bamfile, sudo=sudo, mock=mock)
     return job.fileStore.writeGlobalFile(os.path.join(work_dir, 'aligned_fixPG.bam'))
 
 
@@ -550,6 +594,7 @@ def add_readgroups(job, job_vars, bam_id):
     input_args, ids = job_vars
     sudo = input_args['sudo']
     uuid = input_args['uuid']
+    mock = input_args['mock']
     output_file = '{}.bam'.format(uuid)
     # Retrieve input file
     job.fileStore.readGlobalFile(bam_id, os.path.join(work_dir, 'aligned_fixpg.bam'))
@@ -565,6 +610,8 @@ def add_readgroups(job, job_vars, bam_id):
                   'PL=ILLUMINA',
                   'PU=12345',
                   'SM={}'.format(uuid)]
+    inputs = ['aligned_fixPG.bam']
+    outputs = {output_file: mock_bam} #FIXME
     docker_call(tool='quay.io/ucsc_cgl/picardtools:1.95--dd5ac549b95eb3e5d166a5e310417ef13651994e',
                 tool_parameters=parameters, work_dir=work_dir, java_opts='-Xmx15G', sudo=sudo)
 
@@ -686,7 +733,8 @@ def main():
               'file_size': args.file_size,
               'use_bwakit': args.use_bwakit,
               'sort': not args.skip_sort,
-              'trim': args.trim}
+              'trim': args.trim,
+              'mock': args.mock}
 
     # Launch Pipeline
     Job.Runner.startToil(Job.wrapJobFn(download_shared_files, inputs), args)

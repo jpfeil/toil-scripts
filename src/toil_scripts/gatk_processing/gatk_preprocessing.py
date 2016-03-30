@@ -294,11 +294,11 @@ def docker_call_preprocess(work_dir, tool_parameters, tool, inputs, outputs, jav
     if java_opts:
         base_docker_call = base_docker_call + ['-e', 'JAVA_OPTS={}'.format(java_opts)]
     if debug:
-	debug_log = open(tool.split('/')[0], 'w')
-	debug_log.write(repr(base_docker_call) + '\n')
-	debug_log.write(repr(tool_parameters))
-	
-	debug_log.close()
+        debug_log = open(tool.split('/')[0], 'w')
+        debug_log.write(repr(base_docker_call) + '\n')
+        debug_log.write(repr(tool_parameters))
+
+        debug_log.close()
         for outfile in outfiles:
             outpath = os.path.join(work_dir, outfile)
             f = open(outpath, 'w')
@@ -628,12 +628,12 @@ def realigner_target_creator(job, shared_ids, input_args):
                   '-o', 'sample.intervals']
 
     docker_call_preprocess(work_dir=work_dir, tool_parameters=parameters,
-		tool='quay.io/ucsc_cgl/gatk:3.4--dd5ac549b95eb3e5d166a5e310417ef13651994e',
+        tool='quay.io/ucsc_cgl/gatk:3.4--dd5ac549b95eb3e5d166a5e310417ef13651994e',
         inputs=inputs,
         outputs=outputs,
         java_opts='-Xmx10g',
         outfiles=['sample.intervals'],
-		sudo=sudo,
+        sudo=sudo,
         mock=mock)
     shared_ids['sample.intervals'] = job.fileStore.writeGlobalFile(output)
     job.addChildJobFn(indel_realignment, shared_ids, input_args)
