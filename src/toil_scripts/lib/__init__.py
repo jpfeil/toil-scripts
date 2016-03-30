@@ -14,6 +14,22 @@ def flatten(x):
     return result
 
 
+# FIXME: replace with bd2k.util humanization function
+def sizeof_fmt(num, suffix='B'):
+    """
+    Humanize input
+
+    :param int num: number to be converted to human-readable string
+    :param str suffix: Size suffix; defaults to B for byte
+    :return str: Human-readable string
+    """
+    for unit in ['','K','M','G','T','P','E','Z']:
+        if abs(num) < 1024.0:
+            return "%3.1f%s%s" % (num, unit, suffix)
+        num /= 1024.0
+    return "%.1f%s%s" % (num, 'Y', suffix)
+
+
 def partitions(l, partition_size):
     """
     >>> list(partitions([], 10))
