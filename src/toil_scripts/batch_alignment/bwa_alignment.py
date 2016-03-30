@@ -200,19 +200,28 @@ def docker_call(work_dir,
     """
 
     for filename in inputs:
-        if not os.path.isabs(filename):
-            filename = os.path.join(work_dir, filename)
-        assert(os.path.isfile(filename))
+        assert(os.path.join(work_dir, filename))
 
     if mock:
-        for filename, location in outputs.items():
-            if location is None:
+        for filename, url in outputs.items():
+            if url is None:
                 # create mock file
                 if not os.path.exists(filename):
                     open(filename, 'w').close()
             else:
-                # download file FIXME
-                pass
+                file_path = os.path.join(work_dir, filename)
+                if not os.path.exists(file_path):
+                    if url.startswith('s3:'):
+                        download_from_s3_url(file_path, url)
+                    else:
+                        try:
+                            download_cmd = ['curl', '-fs', '--retry', '5', '--create-dir', url, '-o', file_path]
+                            _log.info("Downloading file using command %s." % " ".join(download_cmd))
+                            subprocess.check_call(download_cmd)
+                        except OSError:
+                            raise RuntimeError('Failed to find "curl". Install via "apt-get install curl"')
+                assert os.path.exists(file_path)
+
         return
 
     rm = '--rm'
@@ -474,7 +483,7 @@ def run_bwa(job, job_vars):
                        '/data/r1.fq.gz',
                        '/data/r2.fq.gz'])
 
-        outputs={'aligned.aln.bam': mock_bam} #FIXME
+        outputs={'aligned.aln.bam': "http://www.cs.berkeley.edu/~massie/bams/mouse_chrM.bam"} #FIXME
         docker_call(tool='quay.io/ucsc_cgl/bwakit:0.7.12--528bb9bf73099a31e74a7f5e6e3f2e0a41da486e',
                     tool_parameters=parameters, inputs=inputs, outputs=outputs, work_dir=work_dir, sudo=sudo, mock=mock)
 
@@ -611,7 +620,7 @@ def add_readgroups(job, job_vars, bam_id):
                   'PU=12345',
                   'SM={}'.format(uuid)]
     inputs = ['aligned_fixPG.bam']
-    outputs = {output_file: mock_bam} #FIXME
+    outputs = {output_file: "http://www.cs.berkeley.edu/~massie/bams/mouse_chrM.bam"} #FIXME
     docker_call(tool='quay.io/ucsc_cgl/picardtools:1.95--dd5ac549b95eb3e5d166a5e310417ef13651994e',
                 tool_parameters=parameters, work_dir=work_dir, java_opts='-Xmx15G', sudo=sudo)
 

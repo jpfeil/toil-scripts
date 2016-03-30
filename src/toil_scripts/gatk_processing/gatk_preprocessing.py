@@ -271,19 +271,27 @@ def docker_call_preprocess(work_dir, tool_parameters, tool, inputs, outputs, jav
     """
 
     for filename in inputs:
-        if not os.path.isabs(filename):
-            filename = os.path.join(work_dir, filename)
-        assert(os.path.isfile(filename))
+        assert(os.path.join(work_dir, filename))
 
     if mock:
-        for filename, location in outputs.items():
-            if location is None:
+        for filename, url in outputs.items():
+            if url is None:
                 # create mock file
                 if not os.path.exists(filename):
                     open(filename, 'w').close()
             else:
-                # download file FIXME
-                pass
+                file_path = os.path.join(work_dir, filename)
+                if not os.path.exists(file_path):
+                    if url.startswith('s3:'):
+                        download_from_s3_url(file_path, url)
+                    else:
+                        try:
+                            download_cmd = ['curl', '-fs', '--retry', '5', '--create-dir', url, '-o', file_path]
+                            _log.info("Downloading file using command %s." % " ".join(download_cmd))
+                            subprocess.check_call(download_cmd)
+                        except OSError:
+                            raise RuntimeError('Failed to find "curl". Install via "apt-get install curl"')
+                assert os.path.exists(file_path)
         return
 
     base_docker_call = 'docker run --log-driver=none --rm -v {}:/data'.format(work_dir).split()
