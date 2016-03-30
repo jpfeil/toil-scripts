@@ -222,6 +222,8 @@ def build_parser():
                         help = '1000G_omni.5.b37.vcf URL')
     parser.add_argument('-H', '--hapmap', required = True,
                         help = 'hapmap_3.3.b37.vcf URL')
+    parser.add_argument('--mock', dest='mock', action='store_true', help='Run the pipeline in mock mode, which skips all '
+                                                                         'docker calls and creates blank result files.')
 
     # return built parser
     return parser
@@ -524,7 +526,8 @@ if __name__ == '__main__':
                               'sudo': args.sudo,
                               'ssec': None,
                               'cpu_count': str(multiprocessing.cpu_count()),
-                              'suffix': '.gatk' }
+                              'suffix': '.gatk',
+                              'mock': args.mock}
 
     gatk_adam_call_inputs = {'ref.fa': args.ref,
                              'phase.vcf': args.phase,
@@ -538,7 +541,8 @@ if __name__ == '__main__':
                              'ssec': None,
                              'file_size': args.file_size,
                              'suffix': '.adam',
-                             'sudo': args.sudo}
+                             'sudo': args.sudo,
+                             'mock': args.mock}
 
     gatk_gatk_call_inputs = {'ref.fa': args.ref,
                              'phase.vcf': args.phase,
@@ -552,7 +556,8 @@ if __name__ == '__main__':
                              'ssec': None,
                              'file_size': args.file_size,
                              'suffix': '.gatk',
-                             'sudo': args.sudo}
+                             'sudo': args.sudo,
+                             'mock': args.mock}
 
     if (args.pipeline_to_run != "adam" and
         args.pipeline_to_run != "gatk" and

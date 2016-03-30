@@ -160,6 +160,8 @@ def launch_pipeline(params):
         # Do we have a defined master IP?
         if params.master_ip:
             pipeline_command.append('--master_ip %s' % params.master_ip)
+        if params.mock:
+            pipeline_command.append('--mock')
 
         if 'alt' in inputs:
             pipeline_command.append('--alt {alt}')
@@ -571,10 +573,11 @@ def main():
     pipeline_sp.add_argument('-f', '--file_size', default='100G',
                              help='Approximate size of the BAM files')
     pipeline_sp.add_argument('-s', '--spark_nodes', type=int, default=8 + 1,
-                             help="The number of Spark nodes, including the master, to allocate per sample. Relevant with separate "
-                                  "running against a standSpark cluster managed, the master will be shared by all samples "
-                                  "and the actual number of workers allocated per sample will be one less than "
-                                  "specified here. Otherwise, each sample's subcluster will get its own master node.")
+                             help="The number of Spark nodes, including the master, to allocate per sample. Relevant "
+                                  "with separate running against a standSpark cluster managed, the master will be "
+                                  "shared by all samples and the actual number of workers allocated per sample will be "
+                                  "one less than specified here. Otherwise, each sample's subcluster will get its own "
+                                  "master node. Default 9 in production mode, 3 in mock mode.")
     pipeline_sp.add_argument('-SD', '--sequence_dir', default='sequence',
                              help='Directory where raw sequences are.')
     pipeline_sp.add_argument('-R', '--reference_genome', required=True,
@@ -604,9 +607,13 @@ def main():
                              "Toil and standalone Spark clusters. Also determines the region of the S3 bucket and SDB "
                              "domain for Toil's job store. The availability zone for spot instances may be chosen "
                              "independently from all zones in the region containing the specified zone.")
+        sp.add_argument('--mock', dest='mock', action='store_true', help='Run the pipeline in mock mode, which skips '
+                                                                         'all docker calls other than those in the ADAM'
+                                                                         ' pipeline and creates blank result files.')
     for sp in cluster_sp, metric_sp:
         sp.add_argument('-t', '--instance-type', default='r3.8xlarge',
-                        help='Worker instance type, e.g. m4.large or c3.8xlarge.')
+                        help='Worker instance type, e.g. m4.large or c3.8xlarge. Defaults to r3.8xlarge in production '
+                             'mode. Will always use c3.large in mock mode, regardless of input value.')
     for sp in metric_sp, cluster_sp:
         sp.add_argument('-etc', '--add-to-etc-hosts', default=None, required=False,
                         help='Deprecated. Optional entry to add to /etc/hosts on Toil workers. This should *not* be '
@@ -614,6 +621,10 @@ def main():
                              'Toil nodes. Use --master_ip=auto instead.')
 
     params = parser.parse_args()
+
+    if params.mock:
+        params.instance_type = 'c3.large'
+        params.spark_nodes = 2 + 1
 
     if params.command == 'launch-cluster':
         launch_cluster(params)

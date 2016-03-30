@@ -55,6 +55,8 @@ def build_parser():
     parser.add_argument('-u', '--sudo', dest='sudo', action='store_true', help='Docker usually needs sudo to execute '
                                                                                'locally, but not''when running Mesos '
                                                                                'or when a member of a Docker group.')
+    parser.add_argument('--mock', dest='mock', action='store_true', help='Run the pipeline in mock mode, which skips all '
+                                                                         'docker calls and creates blank result files.')
     return parser
 
 # Convenience functions used in the pipeline
@@ -255,8 +257,8 @@ def docker_path(file_path):
     return os.path.join('/data', os.path.basename(file_path))
 
 
-def docker_call_preprocess(work_dir, tool_parameters, tool, java_opts=None,
-                outfiles=None, sudo=False):
+def docker_call_preprocess(work_dir, tool_parameters, tool, inputs, outputs, java_opts=None,
+                outfiles=None, sudo=False, mock=False):
     """
     Makes subprocess call of a command to a docker container.
 
@@ -267,6 +269,23 @@ def docker_call_preprocess(work_dir, tool_parameters, tool, java_opts=None,
     outfile: file           Filehandle that stderr will be passed to
     sudo: bool              If the user wants the docker command executed as sudo
     """
+
+    for filename in inputs:
+        if not os.path.isabs(filename):
+            filename = os.path.join(work_dir, filename)
+        assert(os.path.isfile(filename))
+
+    if mock:
+        for filename, location in outputs.items():
+            if location is None:
+                # create mock file
+                if not os.path.exists(filename):
+                    open(filename, 'w').close()
+            else:
+                # download file FIXME
+                pass
+        return
+
     base_docker_call = 'docker run --log-driver=none --rm -v {}:/data'.format(work_dir).split()
 
     # no-op sudo
@@ -293,6 +312,10 @@ def docker_call_preprocess(work_dir, tool_parameters, tool, java_opts=None,
     except OSError:
         raise RuntimeError('docker not found on system. Install on all nodes.')
 
+    for filename in outputs.keys():
+        if not os.path.isabs(filename):
+            filename = os.path.join(work_dir, filename)
+        assert(os.path.isfile(filename))
 
 def tarball_files(work_dir, tar_name, uuid=None, files=None):
     """
@@ -311,7 +334,7 @@ def tarball_files(work_dir, tar_name, uuid=None, files=None):
                 f_out.add(os.path.join(work_dir, fname), arcname=fname)
 
 
-def create_reference_index(job, ref_id, sudo):
+def create_reference_index(job, ref_id, sudo, mock):
     """
     Uses Samtools to create reference index file (.fasta.fai)
 
@@ -334,17 +357,22 @@ def create_reference_index(job, ref_id, sudo):
 
     # Call: Samtools
     command = ['faidx', 'ref.fa']
+    inputs=['ref.fa']
+    outputs={'ref.fa.fai': None}
     docker_call_preprocess(work_dir=work_dir, tool_parameters=command,
                 tool='quay.io/ucsc_cgl/samtools:0.1.19--dd5ac549b95eb3e5d166a5e310417ef13651994e',
+                inputs=inputs,
+                outputs=outputs,
                 outfiles=['ref.fa.fai'],
-                sudo=sudo)
+                sudo=sudo,
+                mock=mock)
     output = os.path.join(work_dir, 'ref.fa.fai')
     assert os.path.exists(output)
     # Write to fileStore
     return job.fileStore.writeGlobalFile(output)
 
 
-def create_reference_dict(job, ref_id, sudo):
+def create_reference_dict(job, ref_id, sudo, mock):
     """
     Uses Picardtools to create reference dictionary (.dict) for the sample
 
@@ -356,10 +384,15 @@ def create_reference_dict(job, ref_id, sudo):
     ref_path = job.fileStore.readGlobalFile(ref_id, os.path.join(work_dir, 'ref.fa'))
     # Call: picardtools
     command = ['CreateSequenceDictionary', 'R=ref.fa', 'O=ref.dict']
+    inputs=['ref.fa']
+    outputs={'ref.dict': None}
     docker_call_preprocess(work_dir=work_dir, tool_parameters=command,
                 tool='quay.io/ucsc_cgl/picardtools:1.95--dd5ac549b95eb3e5d166a5e310417ef13651994e',
+                inputs=inputs,
+                outputs=outputs,
                 outfiles=['ref.dict'],
-                sudo=sudo)
+                sudo=sudo,
+                mock=mock)
     # Write to fileStore
     return job.fileStore.writeGlobalFile(os.path.join(work_dir, 'ref.dict'))
 
@@ -390,8 +423,9 @@ def reference_preprocessing(job, shared_ids, input_args):
         ref_id = ref_id['ref.fa']
 
     sudo = input_args['sudo']
-    shared_ids['ref.fa.fai'] = job.addChildJobFn(create_reference_index, ref_id, sudo).rv()
-    shared_ids['ref.dict'] = job.addChildJobFn(create_reference_dict, ref_id, sudo).rv()
+    mock = input_args['mock']
+    shared_ids['ref.fa.fai'] = job.addChildJobFn(create_reference_index, ref_id, sudo, mock).rv()
+    shared_ids['ref.dict'] = job.addChildJobFn(create_reference_dict, ref_id, sudo, mock).rv()
     job.addFollowOnJobFn(spawn_batch_preprocessing, shared_ids, input_args)
 
 
@@ -453,6 +487,7 @@ def index_sample(job, shared_ids, input_args):
     # Unpack convenience variables for job
     work_dir = job.fileStore.getLocalTempDir()
     sudo = input_args['sudo']
+    mock = input_args['mock']
     read_from_filestore(job, work_dir, shared_ids, 'sample.bam')
     outpath = os.path.join(work_dir, 'sample.bam.bai')
     debug_log.write(outpath + '\n')
@@ -460,10 +495,15 @@ def index_sample(job, shared_ids, input_args):
     # Retrieve file path
     # Call: index the normal.bam
     parameters = ['index', 'sample.bam']
+    inputs=['sample.bam']
+    outputs={'sample.bam.bai': None}
     docker_call_preprocess(work_dir=work_dir, tool_parameters=parameters,
                 tool='quay.io/ucsc_cgl/samtools:0.1.19--dd5ac549b95eb3e5d166a5e310417ef13651994e',
+                inputs=inputs,
+                outputs=outputs,
                 outfiles=['sample.bam.bai'],
-                sudo=sudo)
+                sudo=sudo,
+                mock=mock)
     shared_ids['sample.bam.bai'] = job.fileStore.writeGlobalFile(outpath)
     job.addChildJobFn(sort_sample, shared_ids, input_args)
 
@@ -483,10 +523,16 @@ def sort_sample(job, shared_ids, input_args):
                'OUTPUT=sample.sorted.bam',
                'SORT_ORDER=coordinate']
     sudo = input_args['sudo']
+    mock = input_args['mock']
+    inputs=['sample.bam', 'sample.bam.bai']
+    outputs={'sample.sorted.bam': None}
     docker_call_preprocess(work_dir=work_dir, tool_parameters=command,
                 tool='quay.io/ucsc_cgl/picardtools:1.95--dd5ac549b95eb3e5d166a5e310417ef13651994e',
+                inputs=inputs,
+                outputs=outputs,
                 outfiles=['sample.sorted.bam'],
-                sudo=sudo)
+                sudo=sudo,
+                mock=mock)
     shared_ids['sample.sorted.bam'] = job.fileStore.writeGlobalFile(outpath)
     job.addChildJobFn(mark_dups_sample, shared_ids, input_args)
 
@@ -496,6 +542,7 @@ def mark_dups_sample(job, shared_ids, input_args):
     Uses picardtools MarkDuplicates
     """
     sudo = input_args['sudo']
+    mock = input_args['mock']
     work_dir = job.fileStore.getLocalTempDir()
     # Retrieve file path
     read_from_filestore(job, work_dir, shared_ids, 'sample.sorted.bam')
@@ -506,10 +553,15 @@ def mark_dups_sample(job, shared_ids, input_args):
                'OUTPUT=sample.mkdups.bam',
                'METRICS_FILE=metrics.txt',
                'ASSUME_SORTED=true']
+    inputs=['sample.sorted.bam']
+    outputs={'sample.mkdups.bam': None}
     docker_call_preprocess(work_dir=work_dir, tool_parameters=command,
                 tool='quay.io/ucsc_cgl/picardtools:1.95--dd5ac549b95eb3e5d166a5e310417ef13651994e',
+                inputs=inputs,
+                outputs=outputs,
                 outfiles=['sample.mkdups.bam'],
-                sudo=sudo)
+                sudo=sudo,
+                mock=mock)
     shared_ids['sample.mkdups.bam'] = job.fileStore.writeGlobalFile(outpath)
     job.addChildJobFn(index_mkdups, shared_ids, input_args)
 
@@ -524,6 +576,7 @@ def index_mkdups(job, shared_ids, input_args):
     # Unpack convenience variables for job
     work_dir = job.fileStore.getLocalTempDir()
     sudo = input_args['sudo']
+    mock = input_args['mock']
     read_from_filestore(job, work_dir, shared_ids, 'sample.mkdups.bam')
     outpath = os.path.join(work_dir, 'sample.mkdups.bam.bai')
     debug_log.write(outpath + '\n')
@@ -531,10 +584,15 @@ def index_mkdups(job, shared_ids, input_args):
     # Retrieve file path
     # Call: index the normal.bam
     parameters = ['index', 'sample.mkdups.bam']
+    inputs=['sample.mkdups.bam']
+    outputs={'sample.mkdups.bam.bai': None}
     docker_call_preprocess(work_dir=work_dir, tool_parameters=parameters,
                 tool='quay.io/ucsc_cgl/samtools:0.1.19--dd5ac549b95eb3e5d166a5e310417ef13651994e',
+                inputs=inputs,
+                outputs=outputs,
                 outfiles=['sample.mkdups.bam.bai'],
-                sudo=sudo)
+                sudo=sudo,
+                mock=mock)
     shared_ids['sample.mkdups.bam.bai'] = job.fileStore.writeGlobalFile(outpath)
     job.addChildJobFn(realigner_target_creator, shared_ids, input_args)
 
@@ -548,6 +606,7 @@ def realigner_target_creator(job, shared_ids, input_args):
     """
     work_dir = job.fileStore.getLocalTempDir()
     sudo = input_args['sudo']
+    mock = input_args['mock']
     # Retrieve input file paths
     read_from_filestore(job, work_dir, shared_ids, 'ref.fa',
                         'sample.mkdups.bam', 'ref.fa.fai', 'ref.dict',
@@ -556,6 +615,9 @@ def realigner_target_creator(job, shared_ids, input_args):
     # Output file path
     output = os.path.join(work_dir, 'sample.intervals')
     # Call: GATK -- RealignerTargetCreator
+    inputs=['ref.fa','sample.mkdups.bam', 'ref.fa.fai', 'ref.dict',
+            'sample.mkdups.bam.bai', 'phase.vcf', 'mills.vcf']
+    outputs={'sample.intervals': None}
     parameters = ['-T', 'RealignerTargetCreator',
                   '-nt', input_args['cpu_count'],
                   '-R', 'ref.fa',
@@ -567,9 +629,12 @@ def realigner_target_creator(job, shared_ids, input_args):
 
     docker_call_preprocess(work_dir=work_dir, tool_parameters=parameters,
 		tool='quay.io/ucsc_cgl/gatk:3.4--dd5ac549b95eb3e5d166a5e310417ef13651994e',
-                java_opts='-Xmx10g',
-                outfiles=['sample.intervals'],
-		sudo=sudo)
+        inputs=inputs,
+        outputs=outputs,
+        java_opts='-Xmx10g',
+        outfiles=['sample.intervals'],
+		sudo=sudo,
+        mock=mock)
     shared_ids['sample.intervals'] = job.fileStore.writeGlobalFile(output)
     job.addChildJobFn(indel_realignment, shared_ids, input_args)
 
@@ -584,6 +649,7 @@ def indel_realignment(job, shared_ids, input_args):
     # Unpack convenience variables for job
     work_dir = job.fileStore.getLocalTempDir()
     sudo = input_args['sudo']
+    mock = input_args['mock']
     # Retrieve input file paths
     return_input_paths(job, work_dir, shared_ids, 'ref.fa',
                        'sample.mkdups.bam', 'phase.vcf', 'mills.vcf',
@@ -591,6 +657,10 @@ def indel_realignment(job, shared_ids, input_args):
                        'sample.mkdups.bam.bai')
     # Output file path
     output = os.path.join(work_dir, 'sample.indel.bam')
+    inputs=['ref.fa', 'sample.mkdups.bam', 'phase.vcf', 'mills.vcf',
+            'sample.intervals', 'ref.fa.fai', 'ref.dict',
+            'sample.mkdups.bam.bai']
+    outputs={'sample.indel.bam': None}
     # Call: GATK -- IndelRealigner
     parameters = ['-T', 'IndelRealigner',
                   '-R', 'ref.fa',
@@ -604,8 +674,9 @@ def indel_realignment(job, shared_ids, input_args):
                   '-o', 'sample.indel.bam']
     docker_call_preprocess(tool='quay.io/ucsc_cgl/gatk:3.4--dd5ac549b95eb3e5d166a5e310417ef13651994e',
                 work_dir=work_dir, tool_parameters=parameters,
+                inputs=inputs, outputs=outputs,
                 java_opts='-Xmx10g', sudo=sudo,
-                outfiles=['sample.indel.bam', 'sample.indel.bam.bai'])
+                outfiles=['sample.indel.bam', 'sample.indel.bam.bai'], mock=mock)
     # Write to fileStore
     shared_ids['sample.indel.bam'] = job.fileStore.writeGlobalFile(output)
     job.addFollowOnJobFn(index_indel, shared_ids, input_args)
@@ -621,6 +692,7 @@ def index_indel(job, shared_ids, input_args):
     # Unpack convenience variables for job
     work_dir = job.fileStore.getLocalTempDir()
     sudo = input_args['sudo']
+    mock = input_args['mock']
     read_from_filestore(job, work_dir, shared_ids, 'sample.indel.bam')
     outpath = os.path.join(work_dir, 'sample.indel.bam.bai')
     debug_log.write(outpath + '\n')
@@ -628,10 +700,15 @@ def index_indel(job, shared_ids, input_args):
     # Retrieve file path
     # Call: index the normal.bam
     parameters = ['index', 'sample.indel.bam']
+    inputs=['sample.indel.bam']
+    outputs={'sample.indel.bam.bai': None}
     docker_call_preprocess(work_dir=work_dir, tool_parameters=parameters,
                 tool='quay.io/ucsc_cgl/samtools:0.1.19--dd5ac549b95eb3e5d166a5e310417ef13651994e',
+                inputs=inputs,
+                outputs=outputs,
                 outfiles=['sample.indel.bam.bai'],
-                sudo=sudo)
+                sudo=sudo,
+                mock=mock)
     shared_ids['sample.indel.bam.bai'] = job.fileStore.writeGlobalFile(outpath)
     job.addChildJobFn(base_recalibration, shared_ids, input_args)
 
@@ -646,6 +723,7 @@ def base_recalibration(job, shared_ids, input_args):
     # Unpack convenience variables for job
     work_dir = job.fileStore.getLocalTempDir()
     sudo = input_args['sudo']
+    mock = input_args['mock']
     # Retrieve input file paths
     return_input_paths(job, work_dir, shared_ids, 'ref.fa', 'sample.indel.bam',
                        'dbsnp.vcf', 'ref.fa.fai',
@@ -659,10 +737,15 @@ def base_recalibration(job, shared_ids, input_args):
                   '-I', 'sample.indel.bam',
                   '-knownSites', 'dbsnp.vcf',
                   '-o', 'sample.recal.table']
+    inputs=['ref.fa', 'sample.indel.bam',
+            'dbsnp.vcf', 'ref.fa.fai',
+            'ref.dict', 'sample.indel.bam.bai']
+    outputs={'sample.recal.table': None}
     docker_call_preprocess(tool='quay.io/ucsc_cgl/gatk:3.4--dd5ac549b95eb3e5d166a5e310417ef13651994e',
                 work_dir=work_dir, tool_parameters=parameters,
+                inputs=inputs, outputs=outputs,
                 java_opts='-Xmx15g', sudo=sudo,
-                outfiles=['sample.recal.table'])
+                outfiles=['sample.recal.table'], mock=mock)
     # Write to fileStore
     shared_ids['sample.recal.table'] = job.fileStore.writeGlobalFile(output)
     job.addChildJobFn(print_reads, shared_ids, input_args)
@@ -680,6 +763,7 @@ def print_reads(job, shared_ids, input_args):
     suffix = input_args['suffix']
     work_dir = job.fileStore.getLocalTempDir()
     sudo = input_args['sudo']
+    mock = input_args['mock']
     # Retrieve input file paths
     return_input_paths(job, work_dir, shared_ids, 'ref.fa', 'sample.indel.bam',
                        'ref.fa.fai', 'ref.dict', 'sample.indel.bam.bai', 'sample.recal.table')
@@ -694,8 +778,12 @@ def print_reads(job, shared_ids, input_args):
                   '-I', 'sample.indel.bam',
                   '-BQSR', 'sample.recal.table',
                   '-o', outfile]
+    inputs=['ref.fa', 'sample.indel.bam',
+            'ref.fa.fai', 'ref.dict', 'sample.indel.bam.bai', 'sample.recal.table']
+    outputs={outfile: None}
     docker_call_preprocess(tool='quay.io/ucsc_cgl/gatk:3.4--dd5ac549b95eb3e5d166a5e310417ef13651994e',
                 work_dir=work_dir, tool_parameters=parameters,
+                inputs=inputs, outputs=outputs,
                 java_opts='-Xmx15g', sudo=sudo, outfiles=[outfile])
 
     upload_or_move(job, work_dir, input_args, outfile)
@@ -719,7 +807,8 @@ def main():
               'sudo': pargs.sudo,
               'ssec': pargs.ssec,
               'suffix': pargs.suffix,
-              'cpu_count': str(multiprocessing.cpu_count())}
+              'cpu_count': str(multiprocessing.cpu_count())
+              'mock': pargs.mock}
 
 
     # Launch Pipeline
