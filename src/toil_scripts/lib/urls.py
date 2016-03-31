@@ -39,7 +39,7 @@ def download_url_job(job, url, name=None, s3_key_path=None, cghub_key_path=None)
     return job.fileStore.writeGlobalFile(fpath)
 
 
-def s3am_upload(fpath, s3_dir, num_cores=1, s3_encryption_key_path=None):
+def s3am_upload(fpath, s3_dir, num_cores=1, s3_key_path=None):
     """
     Uploads a file to s3 via S3AM
     For SSE-C encryption: provide a path to a 32-byte file
@@ -47,23 +47,23 @@ def s3am_upload(fpath, s3_dir, num_cores=1, s3_encryption_key_path=None):
     :param str fpath: Path to file to upload
     :param str s3_dir: Ouptut S3 path. Format: s3://bucket/[directory]
     :param int num_cores: Number of cores to use for up/download with S3AM
-    :param str s3_encryption_key_path: (OPTIONAL) Path to 32-byte key to be used for SSE-C encryption
+    :param str s3_key_path: (OPTIONAL) Path to 32-byte key to be used for SSE-C encryption
     """
     if not s3_dir.startswith('s3://'):
         raise ValueError('Format of s3_dir (s3://) is incorrect: {}'.format(s3_dir))
     s3_dir = os.path.join(s3_dir, os.path.basename(fpath))
-    if s3_encryption_key_path:
-        _s3am_with_retry(num_cores, '--sse-key-is-master', '--sse-key-file', s3_encryption_key_path,
+    if s3_key_path:
+        _s3am_with_retry(num_cores, '--sse-key-is-master', '--sse-key-file', s3_key_path,
                          'file://{}'.format(fpath), s3_dir)
     else:
         _s3am_with_retry(num_cores, 'file://{}'.format(fpath), s3_dir)
 
 
-def s3am_upload_job(job, file_id, file_name, s3_dir, num_cores, s3_encryption_key_path=None):
+def s3am_upload_job(job, file_id, file_name, s3_dir, num_cores, s3_key_path=None):
     """Job version of `s3am_upload`"""
     work_dir = job.fileStore.getLocalTempDir()
     fpath = job.fileStore.readGlobalFile(file_id, os.path.join(work_dir, file_name))
-    s3am_upload(fpath=fpath, s3_dir=s3_dir, num_cores=num_cores, s3_encryption_key_path=s3_encryption_key_path)
+    s3am_upload(fpath=fpath, s3_dir=s3_dir, num_cores=num_cores, s3_key_path=s3_key_path)
 
 
 def _download_s3_url(file_path, url, ceph=None):

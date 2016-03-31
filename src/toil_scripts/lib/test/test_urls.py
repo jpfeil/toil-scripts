@@ -33,7 +33,7 @@ def test_upload_and_download_with_encryption(tmpdir):
         fout.write(os.urandom(1024))
     # Upload file
     s3_dir = 's3://cgl-driver-projects/test'
-    s3am_upload(fpath=upload_fpath, s3_dir=s3_dir, s3_encryption_key_path=key_path)
+    s3am_upload(fpath=upload_fpath, s3_dir=s3_dir, s3_key_path=key_path)
     # Download the file
     url = 'https://s3-us-west-2.amazonaws.com/cgl-driver-projects/test/upload_file'
     download_url(url=url, name='download_file', work_dir=work_dir, s3_key_path=key_path)
