@@ -7,20 +7,20 @@ from urlparse import urlparse
 from toil_scripts.lib.programs import docker_call
 
 
-def download_url(url, work_dir='.', name=None, s3_encryption_key_path=None, cghub_key_path=None):
+def download_url(url, work_dir='.', name=None, s3_key_path=None, cghub_key_path=None):
     """
     Downloads URL, can pass in file://, http://, s3://, or ftp://, gnos://cghub/analysisID, or gnos:///analysisID
 
     :param str url: URL to download from
     :param str work_dir: Directory to download file to
     :param str name: Name of output file, if None, basename of URL is used
-    :param str s3_encryption_key_path: Path to 32-byte encryption key if url points to S3 file that uses SSE-C
+    :param str s3_key_path: Path to 32-byte encryption key if url points to S3 file that uses SSE-C
     :param str cghub_key_path: Path to cghub key used to download from CGHub.
     :return str: Path to the downloaded file
     """
     file_path = os.path.join(work_dir, name) if name else os.path.join(work_dir, os.path.basename(url))
-    if s3_encryption_key_path:
-        _download_encrypted_file(url, file_path, s3_encryption_key_path)
+    if s3_key_path:
+        _download_encrypted_file(url, file_path, s3_key_path)
     elif cghub_key_path:
         _download_from_genetorrent(url, file_path, cghub_key_path)
     elif url.startswith('s3:'):
@@ -31,11 +31,11 @@ def download_url(url, work_dir='.', name=None, s3_encryption_key_path=None, cghu
     return file_path
 
 
-def download_url_job(job, url, name=None, s3_encryption_key_path=None, cghub_key_path=None):
+def download_url_job(job, url, name=None, s3_key_path=None, cghub_key_path=None):
     """Job version of `download_url`"""
     work_dir = job.fileStore.getLocalTempDir()
     fpath = download_url(url, work_dir=work_dir, name=name,
-                         s3_encryption_key_path=s3_encryption_key_path, cghub_key_path=cghub_key_path)
+                         s3_key_path=s3_key_path, cghub_key_path=cghub_key_path)
     return job.fileStore.writeGlobalFile(fpath)
 
 
