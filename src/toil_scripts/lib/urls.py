@@ -1,23 +1,28 @@
 import base64
+import glob
 import hashlib
 import os
 import subprocess
 from urlparse import urlparse
+from toil_scripts.lib.programs import docker_call
 
 
-def download_url(url, work_dir='.', name=None, s3_encryption_key_path=None):
+def download_url(url, work_dir='.', name=None, s3_encryption_key_path=None, cghub_key_path=None):
     """
-    Downloads URL, can pass in file://, http://, s3://, or ftp://
+    Downloads URL, can pass in file://, http://, s3://, or ftp://, or genetorrent analysisID
 
     :param str url: URL to download from
     :param str work_dir: Directory to download file to
     :param str name: Name of output file, if None, basename of URL is used
     :param str s3_encryption_key_path: Path to 32-byte encryption key if url points to S3 file that uses SSE-C
+    :param str cghub_key_path: Path to cghub key used to download from CGHub
     :return str: Path to the downloaded file
     """
     file_path = os.path.join(work_dir, name) if name else os.path.join(work_dir, os.path.basename(url))
     if s3_encryption_key_path:
         _download_encrypted_file(url, file_path, s3_encryption_key_path)
+    elif cghub_key_path:
+        _download_from_genetorrent(url, file_path, cghub_key_path)
     elif url.startswith('s3:'):
         _download_s3_url(file_path, url)
     else:
@@ -26,10 +31,11 @@ def download_url(url, work_dir='.', name=None, s3_encryption_key_path=None):
     return file_path
 
 
-def download_url_job(job, url, name=None, s3_encryption_key_path=None):
+def download_url_job(job, url, name=None, s3_encryption_key_path=None, cghub_key_path=None):
     """Job version of `download_url`"""
     work_dir = job.fileStore.getLocalTempDir()
-    fpath = download_url(url, work_dir=work_dir, name=name, s3_encryption_key_path=s3_encryption_key_path)
+    fpath = download_url(url, work_dir=work_dir, name=name,
+                         s3_encryption_key_path=s3_encryption_key_path, cghub_key_path=cghub_key_path)
     return job.fileStore.writeGlobalFile(fpath)
 
 
@@ -106,21 +112,14 @@ def _download_encrypted_file(url, file_path, key_path):
     assert os.path.exists(file_path)
 
 
-def _generate_unique_key(master_key_path, url):
-    """
-    Generate a unique encryption key given a URL and a path to another "master" encrypion key
-
-    :param str master_key_path: Path to the master key
-    :param str url: URL used to generate unique encryption key
-    :return str: The new 32-byte key
-    """
-    with open(master_key_path, 'r') as f:
-        master_key = f.read()
-    if len(master_key) != 32:
-        raise ValueError('Bad key in {}. Must be 32 bytes'.format(master_key_path))
-    new_key = hashlib.sha256(master_key + url).digest()
-    assert len(new_key) == 32, 'New key is not 32 bytes and is invalid! Check code'
-    return new_key
+def _download_from_genetorrent(analysis_id, file_path, cghub_key_path):
+    work_dir = os.path.dirname(file_path)
+    folder_path = os.path.join(work_dir, os.path.basename(analysis_id))
+    parameters = ['-vv', '-c', cghub_key_path, '-d', analysis_id]
+    docker_call(tool='quay.io/ucsc_cgl/genetorrent:3.8.7--9911761265b6f08bc3ef09f53af05f56848d805b',
+                work_dir=work_dir, parameters=parameters)
+    sample = glob.glob(os.path.join(folder_path, '*tar*'))
+    assert len(sample) == 1, 'More than one sample tar in CGHub download: {}'.format(analysis_id)
 
 
 def _s3am_with_retry(num_cores, *args):
@@ -141,3 +140,22 @@ def _s3am_with_retry(num_cores, *args):
         else:
             print 'S3AM failed with status code: {}'.format(ret_code)
     raise RuntimeError('S3AM failed to upload after {} retries.'.format(retry_count))
+
+
+def _generate_unique_key(master_key_path, url):
+    """
+    Generate a unique encryption key given a URL and a path to another "master" encrypion key
+
+    :param str master_key_path: Path to the master key
+    :param str url: URL used to generate unique encryption key
+    :return str: The new 32-byte key
+    """
+    with open(master_key_path, 'r') as f:
+        master_key = f.read()
+    if len(master_key) != 32:
+        raise ValueError('Bad key in {}. Must be 32 bytes'.format(master_key_path))
+    new_key = hashlib.sha256(master_key + url).digest()
+    assert len(new_key) == 32, 'New key is not 32 bytes and is invalid! Check code'
+    return new_key
+
+
