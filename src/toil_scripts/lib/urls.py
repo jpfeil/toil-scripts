@@ -9,13 +9,13 @@ from toil_scripts.lib.programs import docker_call
 
 def download_url(url, work_dir='.', name=None, s3_encryption_key_path=None, cghub_key_path=None):
     """
-    Downloads URL, can pass in file://, http://, s3://, or ftp://, or genetorrent analysisID
+    Downloads URL, can pass in file://, http://, s3://, or ftp://, gnos://cghub/analysisID, or gnos:///analysisID
 
     :param str url: URL to download from
     :param str work_dir: Directory to download file to
     :param str name: Name of output file, if None, basename of URL is used
     :param str s3_encryption_key_path: Path to 32-byte encryption key if url points to S3 file that uses SSE-C
-    :param str cghub_key_path: Path to cghub key used to download from CGHub
+    :param str cghub_key_path: Path to cghub key used to download from CGHub.
     :return str: Path to the downloaded file
     """
     file_path = os.path.join(work_dir, name) if name else os.path.join(work_dir, os.path.basename(url))
@@ -112,7 +112,10 @@ def _download_encrypted_file(url, file_path, key_path):
     assert os.path.exists(file_path)
 
 
-def _download_from_genetorrent(analysis_id, file_path, cghub_key_path):
+def _download_from_genetorrent(url, file_path, cghub_key_path):
+    url = urlparse(url)
+    analysis_id = url.path[1:]
+    assert url.scheme == 'gnos', 'Improper format. gnos://cghub/ID. User supplied: {}'.format(url)
     work_dir = os.path.dirname(file_path)
     folder_path = os.path.join(work_dir, os.path.basename(analysis_id))
     parameters = ['-vv', '-c', cghub_key_path, '-d', analysis_id]
@@ -157,5 +160,3 @@ def _generate_unique_key(master_key_path, url):
     new_key = hashlib.sha256(master_key + url).digest()
     assert len(new_key) == 32, 'New key is not 32 bytes and is invalid! Check code'
     return new_key
-
-
