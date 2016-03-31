@@ -610,7 +610,7 @@ def consolidate_output(job, job_vars, output_ids_and_values):
     ids['uuid.tar.gz'] = job.fileStore.writeGlobalFile(out_tar)
     # If S3 bucket argument specified, upload to S3
     if input_args['s3_dir']:
-        job.addChildJobFn(s3am_upload, fpath=out_tar, s3_dir=input_args['s3_dir'], num_cores=cores)
+        s3am_upload(fpath=out_tar, s3_dir=input_args['s3_dir'], num_cores=cores)
 
 
 def main():
