@@ -1,4 +1,8 @@
 # FIXME: replace with bd2k.util.iterables.flatten
+import os
+import shutil
+
+
 def flatten(x):
     """
     Flattens a nested array into a single list
@@ -46,3 +50,19 @@ def partitions(l, partition_size):
     """
     for i in xrange(0, len(l), partition_size):
         yield l[i:i + partition_size]
+
+
+def copy_to_output_dir(output_dir, uuid=None, fpaths=list()):
+    """
+    A list of files to move from work_dir to output_dir.
+
+    work_dir: str       Current working directory
+    output_dir: str     Output directory for files to go
+    uuid: str           UUID to "stamp" onto output files
+    files: list         List of files to iterate through
+    """
+    for fpath in fpaths:
+        if uuid is None:
+            shutil.copy(fpath, os.path.join(output_dir, os.path.basename(fpath)))
+        else:
+            shutil.copy(fpath, os.path.join(output_dir, '{}.{}'.format(uuid, os.path.basename(fpath))))
