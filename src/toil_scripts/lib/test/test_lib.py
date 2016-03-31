@@ -26,5 +26,5 @@ def test_copy_to_output_dir(tmpdir):
     fpath = os.path.join(work_dir, 'test')
     with open(fpath, 'wb') as fout:
         fout.write(os.urandom(1024))
-    copy_to_output_dir(output_dir=subdir, uuid='uuid', fpaths=[fpath])
+    copy_to_output_dir(output_dir=subdir, fpaths=[fpath], uuid='uuid')
     assert os.path.exists(os.path.join(subdir, 'uuid.test'))

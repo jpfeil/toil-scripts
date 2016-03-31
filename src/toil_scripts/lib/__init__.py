@@ -52,14 +52,13 @@ def partitions(l, partition_size):
         yield l[i:i + partition_size]
 
 
-def copy_to_output_dir(output_dir, uuid=None, fpaths=list()):
+def copy_to_output_dir(output_dir, fpaths, uuid=None):
     """
     A list of files to move from work_dir to output_dir.
 
-    work_dir: str       Current working directory
-    output_dir: str     Output directory for files to go
-    uuid: str           UUID to "stamp" onto output files
-    files: list         List of files to iterate through
+    :param str output_dir: Directory to move files to
+    :param list fpaths: List of filepaths to move
+    :param str uuid: Optional UUID to tag files with
     """
     for fpath in fpaths:
         if uuid is None:
