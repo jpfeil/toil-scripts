@@ -244,7 +244,7 @@ def process_sample_tar(job, job_vars):
     work_dir = job.fileStore.getLocalTempDir()
     ids['R.fastq'] = None
     # I/O
-    tar_id = input_args['sample.tar']
+    tar_id = ids['sample.tar']
     job.fileStore.readGlobalFile(tar_id, os.path.join(work_dir, 'sample.tar'))
     tar_path = os.path.join(work_dir, 'sample.tar')
     # Untar File and concat
