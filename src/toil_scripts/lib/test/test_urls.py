@@ -44,5 +44,5 @@ def test_upload_and_download_with_encryption(tmpdir):
     conn = S3Connection()
     b = Bucket(conn, 'cgl-driver-projects')
     k = Key(b)
-    k.key = 'test/output_file'
+    k.key = 'test/upload_file'
     k.delete()
