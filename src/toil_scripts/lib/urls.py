@@ -134,7 +134,7 @@ def _s3am_with_retry(num_cores, *args):
     """
     retry_count = 3
     for i in xrange(retry_count):
-        s3am_command = ['s3am', 'upload', '--force', '--part-size=50M',
+        s3am_command = ['s3am', 'upload', '--force', '--part-size=50M', '--exists=overwrite'
                         '--upload-slots={}'.format(num_cores),
                         '--download-slots={}'.format(num_cores)] + list(args)
         ret_code = subprocess.call(s3am_command)
