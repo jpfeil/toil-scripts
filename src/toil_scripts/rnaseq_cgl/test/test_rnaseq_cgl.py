@@ -17,7 +17,7 @@ def test_rnaseq_cgl(tmpdir):
                                os.path.join(subdir, 'jstore'),
                                '--config', os.path.join(work_dir, 'config.txt'),
                                '--retryCount', '1',
-                               '--s3_dir', 'cgl-driver-projects/test/releases',
+                               '--s3_dir', 's3://cgl-driver-projects/test/releases',
                                '--workDir', os.path.join(subdir, 'workDir'),
                                '--starIndex', star_index,
                                '--rsemRef', rsem_ref,
