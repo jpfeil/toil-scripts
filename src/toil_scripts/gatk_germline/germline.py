@@ -194,6 +194,7 @@ def gatk_germline_pipeline(job, samples, config):
                                             get_bam.rv(0),
                                             get_bam.rv(1),
                                             config.genome_fasta, config.genome_fai, config.genome_dict,
+                                            intervals=config.intervals,
                                             annotations=config.annotations,
                                             cores=config.cores,
                                             disk=hc_disk,
@@ -683,6 +684,7 @@ def setup_and_run_bwakit(job, uuid, url, rg_line, config, paired_url=None):
 def gatk_haplotype_caller(job,
                           bam, bai,
                           ref, fai, ref_dict,
+                          intervals=None,
                           annotations=None,
                           emit_threshold=10.0, call_threshold=30.0,
                           unsafe_mode=False,
@@ -729,6 +731,10 @@ def gatk_haplotype_caller(job,
                '-variant_index_parameter', '128000',
                '--genotyping_mode', 'Discovery',
                '--emitRefConfidence', 'GVCF']
+
+    if intervals:
+        job.fileStore.readGlobalFile(intervals, os.path.join(work_dir, 'intervals.bed'))
+        command.extend(['-L', 'intervals.bed'])
 
     if unsafe_mode:
         command = ['-U', 'ALLOW_SEQ_DICT_INCOMPATIBILITY'] + command
