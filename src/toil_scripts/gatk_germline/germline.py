@@ -440,6 +440,8 @@ def download_shared_files(job, config):
         shared_files |= {'g1k_snp', 'mills', 'dbsnp', 'hapmap', 'omni'}
     if config.run_oncotator:
         shared_files.add('oncotator_db')
+    if config.intervals:
+        shared_files.add('intervals')
     for name in shared_files:
         try:
             url = getattr(config, name, None)
