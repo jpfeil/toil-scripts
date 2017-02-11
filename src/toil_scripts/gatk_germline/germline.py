@@ -567,6 +567,7 @@ def prepare_bam(job, uuid, url, config, paired_url=None, rg_line=None):
                                    config.g1k_indel,
                                    config.mills,
                                    config.dbsnp,
+                                   intervals=config.intervals,
                                    realign=False,    # Do not realign INDELs
                                    memory=config.xmx,
                                    cores=config.cores).encapsulate()
@@ -700,6 +701,7 @@ def gatk_haplotype_caller(job,
     :param str ref: FileStoreID for reference genome fasta file
     :param str ref_dict: FileStoreID for reference sequence dictionary file
     :param str fai: FileStoreID for reference fasta index file
+    :param str intervals: FileStoreID for BED file containing analysis intervals
     :param list[str] annotations: List of GATK variant annotations, default is None
     :param float emit_threshold: Minimum phred-scale confidence threshold for a variant to be emitted, default is 10.0
     :param float call_threshold: Minimum phred-scale confidence threshold for a variant to be called, default is 30.0
